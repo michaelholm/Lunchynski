@@ -12,54 +12,117 @@
 *
 **/
 
-module.exports = function(sequelize, DataTypes) {
+var request = require('request');
 
-  //var sqlite3 = require('sqlite3').verbose();
-  //var nodeSql = require('nodesql');
-  // var Sequelize = require('sequelize');
-  // var dbPath = global.root.process.env.PWD + '/data/lunchynski.db';
-  // var sequelize = new Sequelize(dbPath, 'root', null, {
-  //   dialect: 'sqlite'
-  // });
+// var Constants = [
+//   API_ROOT_URL: 'http://0.0.0.0:3000/api',
+//   API_URLS: [
+//   	'cuisines': {
+//   		'getAll': '/Cuisines',js
+//   		'create': '/Cuisines',
+//   		'getOne': '/Cuisines/{id}'
+//   	},
+//   	'foodVendor': {
+//   		'getAll': '/FoodVendors',
+//   		'create': '/FoodVendors',
+//   		'getOne': '/FoodVendors/{id}'
+//   	}
+//   ]
+// ];
 
-  var FoodPurveyor = sequelize.define('restaurants',
-    {
-      restaurant_id: { type: DataTypes.INTEGER },
-      name: {
-         type: DataTypes.STRING,
-         allowNull: false
-      },
-      location: {
-        type: DataTypes.STRING,
-        allowNull: false
-      },
-      location_type: {
-        type: DataTypes.STRING,
-        allowNull: false
-      },
-      cuisine: {
-        type: DataTypes.STRING,
-        allowNull: false
-      },
-      created: { type: DataTypes.DATE },
-      updated: { type: DataTypes.STRING }
-    },
-    {
-      instanceMethods: {
-        getDescription: function()  {
-          return this.name + 'is located at ' + this.location + '. It offers ' + this.location_type + ' dining, and serves ' + this.cuisine;
-        }
+
+var FoodPurveyor = function(options) {
+  this.options = options;
+}
+
+FoodPurveyor.prototype.data = {}
+
+FoodPurveyor.prototype.getAll = function() {
+  return new Promise(function(resolve, reject) {
+    request.get({
+      uri: "http://0.0.0.0:3000/api/FoodVendors",
+      method: 'GET'
+    }, function(error, response, body) {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(JSON.parse(body));
       }
+    });
   });
-
-  /**
-   *  location_type:  { 
-   *    type: Sequelize.ENUM,
-   *    values: ['Food Truck', 'Dine In', 'Carry Out', 'Food Court']
-   *  },
-   *  
-   * 
-   */
-
-  return FoodPurveyor;
 };
+
+FoodPurveyor.prototype.getByLocationType = function(type) {
+  type = type ? type : 'Carry Out';
+  var requestUrl = "http://0.0.0.0:3000/api/FoodVendors/bylocationtype?type="+encodeURIComponent(type);
+  console.log('food trucking: getByLocationType', requestUrl);
+  return new Promise(function(resolve, reject) {
+    request.get({
+      uri: requestUrl,
+      method: 'GET'
+    }, function(error, response, body) {
+      if (error) {
+        console.log('error', error);
+        reject(error);
+      } else {
+        console.log('success', JSON.parse(body));
+        resolve(JSON.parse(body));
+      }
+    });
+  });
+};
+
+FoodPurveyor.prototype.getRandom = function() {
+  return new Promise(function(resolve, reject) {
+    request.get({
+      uri: "http://0.0.0.0:3000/api/FoodVendors",
+      method: 'GET'
+    }, function(error, response, body) {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(JSON.parse(body));
+      }
+    });
+  });
+}
+
+// FoodPurveyor.getRandom = function() {
+//   return new Promise(function(resolve, reject) {
+//     request.get({
+//       uri: "http://0.0.0.0:3000/api/FoodVendors",
+//       method: 'GET'
+//     }, function(error, response, body) {
+//       if (error) {
+//         reject(error);
+//       } else {
+//         resolve(JSON.parse(body));
+//       }
+//     });
+//   });
+// }
+
+// FoodPurveyor.remoteMethod(
+//   'getRandom', {
+//     accepts: {},
+//     returns: {arg: 'restaurant', type: 'string'}
+//   }
+// );
+
+FoodPurveyor.prototype.getOne = function(id) {
+  request({
+    uri: "http://0.0.0.0:3000/api/FoodVendors/"+ id,
+    method: "POST",
+    form: {
+      name: "Place to eat",
+      location: "somewhere",
+      location_type: "food truck",
+      cuisine: "food"
+    }
+  }, function(error, response, body) {
+    console.log(body);
+  });
+};
+
+module.exports = FoodPurveyor;
+

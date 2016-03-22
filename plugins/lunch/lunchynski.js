@@ -1,24 +1,41 @@
 // lunchynski.js
-//
+var Promise = require('bluebird');
 var FoodPurveyor = require('./models/FoodPurveyor.js');
-
-var purveyor = new FoodPurveyor(); // instantiated to use for find, quicker, more efficient??
-
+var LunchbotUtterances = require('./models/LunchbotUtterances.js');
+var lunchynski = module.exports = {};
 var lunchbot;
 
-var plugin = {
-  initialize: function(options) {
+lunchynski.start = function(options) {
     var self = this;
-    var controller = options.controller || {};
+    var controller = options.controller || {
+      debug: true,
+      log: true,
+      logLevel: 7
+    };
+    var Purveyor = new FoodPurveyor(); // instantiated to use for find, quicker, more efficient??
+
+    controller.hears(['^random lunch$'], 'direct_message, direct_mention', function(bot, message) {
+      bot.startConversation(message, function(err,convo) {
+        self.setBot(bot);
+        var CB_random = self.random_callback();
+        Purveyor.getAll().then(function(data) {
+          var place = data[0];
+          convo.ask("How about " + place.name + "?", CB_random);
+          convo.next();                
+        }, function() {
+          convo.say("Well, that didn't go as planned. Something must've freaked out");
+        });
+      });
+    });
 
     controller.hears(['lunch', 'lunch?'],'direct_message,direct_mention', function(bot,message) {
-      lunchynski.setBot(bot);
+      self.setBot(bot);
 
-      var CB_dinein = dinein_callback();
-      var CB_default = default_callback();
-      var CB_carryout = carryout_callback();
-      var CB_random = random_callback();
-      var CB_foodtruck = foodtruck_callback();
+      var CB_dinein = self.dinein_callback();
+      var CB_default = self.default_callback();
+      var CB_carryout = self.carryout_callback();
+      var CB_random = self.random_callback();
+      var CB_foodtruck = self.foodtruck_callback();
 
       // start a conversation to handle this response.
       bot.startConversation(message, function(err,convo) {
@@ -56,7 +73,7 @@ var plugin = {
           }
         ]); // end ask
 
-        convo.ask("What kind of place? You can respond with 'food truck', 'dine in', 'carry out', 'random' or 'food court'", [
+        convo.ask("What kind of place? You can respond with 'food truck', 'dine in', 'carry out', 'random' or 'food court', or even 'vending machine'", [
           {
             pattern: 'done',
             callback: function(response,convo) {
@@ -81,71 +98,61 @@ var plugin = {
           {
             pattern: 'random',
             callback: function(response, convo) {
-              purveyor.find({
-                order: 'RANDOM()',
-                limit: 1
-              },
-              function(err, restaurants) {
-                if (err) {
-                  console.log('ERR:', err);
-                } else {
-                  var question = 'How about ' + restaurants[0].name + '?';
-                  convo.ask(question, CB_random);
-                }
-                convo.next();
+              Purveyor.getAll().then(function(data) {
+                var place = data[0];
+                convo.ask("How about " + place.name + "?", CB_random);
+                convo.next();                
               });
             }
           },
           {
-            pattern: '^food truck$',
+            pattern: 'food truck',
             callback: function(response,convo) {
-              purveyor.find({
-                order: 'RANDOM()',
-                limit: 1,
-                where: {
-                  'location_type': { like : '%truck%' }
+              console.log('food trucking');
+              Purveyor.getByLocationType('food truck').then(function(data) {
+                if (data.length > 0) {
+                  console.log('food trucking 2');
+                  var place = data.locations[0];
+                  convo.ask("How about " + place.name + "?", CB_foodtruck);                  
+                } else {
+                  //convo.say("It looks like we don't have any choices for you.");
+                  convo.ask("Want to try again?", CB_foodtruck);
                 }
-              },
-              function(err, rows) {
-                var question = 'How about ' + rows[0].name + '?';
-                convo.ask(question, CB_foodtruck);
-                convo.next();
+                convo.next();                
               });
             }
           },
           {
             pattern:'carry out',
             callback: function(response,convo) {
-              purveyor.find({
-                order: 'RANDOM()',
-                limit: 1,
-                where: {
-                  'location_type': { like : '%carry%' }
-                }
+              Purveyor.getByLocationType('carry out').then(function(data) {
+                console.log('success in getByLocationType', data.locations);
+                var place = data.locations[0];
+                console.log('place', place);
+                convo.ask("How about " + place.name + "?", CB_carryout);
+                convo.next();                
               },
-              function(err, rows) {
-                var question = 'How about ' + rows[0].name + '?';
-                convo.ask(question, CB_carryout);
-                convo.next();
+              function() {
+                console.log('NOT success in getByLocationType');
+                convo.say("It looks like we don't have any choices for you.");
+                convo.ask("Want to try again?", CB_carryout);
+                convo.next;
               });
             }
           },
           {
             pattern:'dine in',
             callback: function(response,convo) {
-              purveyor.find({
-                order: 'RANDOM()',
-                limit: 1,
-                where: {
-                  'location_type': { like : '%carry%' }
-                }
+              Purveyor.getByLocationType('dine in').then(function(data) {
+                var place = data.locations[0];
+                convo.ask("How about " + place.name + "?", CB_carryout);
+                convo.next();                
               },
-              function(err, rows) {
-                var question = 'How about ' + rows[0].name + '?';
-                convo.ask(question, CB_dinein);
-                convo.next();
+              function() {
+                convo.say("It looks like we don't have any choices for you.");
+                convo.ask("Want to try another category?", CB_carryout);
+                convo.next;
               });
-
             }
           },
           {
@@ -286,149 +293,203 @@ var plugin = {
       });
     });
 
-  },
+};
 
-  setBot: function(bot) {
-    lunchbot = bot;
-  },
+lunchynski.stop = function() {
+  console.log('lunch bot stopped');
+};
 
-  default_callback: function() {
-    return [
-        {
-          pattern: 'done',
-          callback: function(response,convo) {
-            convo.say('Sweet. Go eat!');
-            convo.next();
-          }
-        },
-        {
-          pattern: lunchbot.utterances.yes,
-          callback: function(response,convo) {
-            convo.sayFirst('May the food be with you, my friend.');
-            convo.next();
-          }
-        },
-        {
-          pattern: lunchbot.utterances.no,
-          callback: function(response,convo) {
-            purveyor.findAll({
-              // order: 'RANDOM()',
-              limit: 1,
-              where: {
-                location_type: { $like : '%truck%' }
-              }
-            },
-            function(err, rows) {
-              var question = 'How about ' + rows[0].name + '?';
-              convo.ask(question, exports.default_callback());
-              convo.next();
-            });
-            convo.next();
-          }
-        },
-        {
-          default: true,
-          callback: function(response,convo) {
-            // repeat the question
-            convo.repeat();
-            convo.next();
-          }
-        }
-    ];
-  },
+lunchynski.setBot = function(bot) {
+  lunchbot = bot;
+};
 
-  foodtruck_callback: function() {
-    return [
-        {
-          pattern: 'done',
-          callback: function(response,convo) {
-            convo.say('Sweet. Go eat!');
-            convo.next();
-          }
-        },
-        {
-          pattern: lunchbot.utterances.yes,
-          callback: function(response,convo) {
-            convo.sayFirst('May the food be with you, my friend.');
-            convo.next();
-          }
-        },
-        {
-          pattern: lunchbot.utterances.no,
-          callback: function(response,convo) {
-            purveyor.findAll({
-              //order: 'RANDOM()',
-              limit: 1,
-              where: {
-                location_type: { $like : '%truck%' }
-              }
-            },
-            function(err, rows) {
-              var question = 'How about ' + rows[0].name + '?';
-              convo.ask(question, exports.foodtruck_callback());
-              convo.next();
-            });
-            convo.next();
-          }
-        },
-        {
-          default: true,
-          callback: function(response,convo) {
-            // repeat the question
-            convo.repeat();
-            convo.next();
-          }
-        }
-    ];
-  },
+lunchynski.addPurveyor = function(restaurant) {
+  var restaurant = new FoodPurveyor({
+    name: restaurant.name,
+    location: restaurant.location,
+    location_type: restaurant.location_type,
+    cuisine: restaurant.cuisine
+  });
+  restaurant.save(function(err) {
+    if(err) return handleError(err);
+  });
+}
 
-  random_callback: function() {
-    return [
-      {
-        pattern: 'done',
-        callback: function(response,convo) {
-          convo.say('Sweet. Go eat!');
-          convo.next();
-        }
-      },
-      {
-        pattern: lunchbot.utterances.yes,
-        callback: function(response,convo) {
-          convo.sayFirst('Food is good.');
-          convo.next();
-        }
-      },
-      {
-        pattern: lunchbot.utterances.no,
-        callback: function(response,convo) {
-          purveyor.findAll({
-            //order: 'RANDOM()',
-            limit: 1
-          },
-          function(err, restaurants) {
-            if (err) {
-              console.log('ERR:', err);
-            } else {
-              var question = 'How about ' + restaurants[0].name + '?';
-              convo.ask(question, exports.random_callback());
-            }
-            convo.next();
-          });
-        }
-      },
-      {
-        default: true,
-        callback: function(response,convo) {
-          // repeat the question
-          convo.repeat();
-          convo.next();
-        }
+lunchynski.default_callback = function() {
+  return [
+    {
+      pattern: 'done',
+      callback: function(response,convo) {
+        convo.say('Sweet. Go eat!');
+        convo.next();
       }
-    ];
-  },
+    },
+    {
+      pattern: lunchbot.utterances.yes,
+      callback: function(response,convo) {
+        convo.sayFirst('May the food be with you, my friend.');
+        convo.next();
+      }
+    },
+    {
+      pattern: lunchbot.utterances.no,
+      callback: function(response,convo) {
+        purveyor.findAll({
+          // order: 'RANDOM()',
+          limit: 1,
+          where: {
+            location_type: { $like : '%truck%' }
+          }
+        },
+        function(err, rows) {
+          var question = 'How about ' + rows[0].name + '?';
+          convo.ask(question, exports.default_callback());
+          convo.next();
+        });
+        convo.next();
+      }
+    },
+    {
+      default: true,
+      callback: function(response,convo) {
+        // repeat the question
+        convo.repeat();
+        convo.next();
+      }
+    }
+  ];
+};
 
-  carryout_callback: function () {
-    return [
+lunchynski.foodtruck_callback = function() {
+  return [
+    {
+      pattern: 'done',
+      callback: function(response,convo) {
+        convo.say('Sweet. Go eat!');
+        convo.next();
+      }
+    },
+    {
+      pattern: lunchbot.utterances.yes,
+      callback: function(response,convo) {
+        convo.sayFirst('May the food be with you, my friend.');
+        convo.next();
+      }
+    },
+    {
+      pattern: lunchbot.utterances.no,
+      callback: function(response,convo) {
+        Purveyor.getByLocationType('Food Truck').then(function(data) {
+          var place = data[0];
+          convo.ask("How about " + place.name + "?", exports.foodtruck_callback());
+          convo.next();                
+        }, function() {
+          convo.say("It looks like we don't have any choices for you.");
+          convo.ask("Want to try another category?", exports.foodtruck_callback());
+          convo.next;
+        });
+      }
+    },
+    {
+      default: true,
+      callback: function(response,convo) {
+        // repeat the question
+        convo.repeat();
+        convo.next();
+      }
+    }
+  ];
+};
+
+lunchynski.random_callback = function() {
+  var Purveyor = FoodPurveyor();
+  return [
+    {
+      pattern: 'done',
+      callback: function(response,convo) {
+        convo.say('Sweet. Go eat!');
+        convo.next();
+      }
+    },
+    {
+      pattern: lunchbot.utterances.yes,
+      callback: function(response,convo) {
+        convo.sayFirst('Food is good.');
+        convo.next();
+      }
+    },
+    {
+      pattern: lunchbot.utterances.no,
+      callback: function(response,convo) {
+        // var CB_random = exports.random_callback();
+        Purveyor.getAll().then(function(data) {
+          var place = data[0];
+          convo.ask("How about " + place.name + "?", exports.foodtruck_callback());
+          convo.next();                
+        }, function() {
+          convo.say("Well, that didn't go as planned. Something must've freaked out");
+        });
+      }
+    },
+    {
+      default: true,
+      callback: function(response,convo) {
+        // repeat the question
+        convo.repeat();
+        convo.next();
+      }
+    }
+  ];
+};
+
+lunchynski.carryout_callback = function () {
+  var Purveyor = new FoodPurveyor();
+  return [
+    {
+      pattern: 'done',
+      callback: function(response,convo) {
+        convo.say('Sweet. Go eat!');
+        convo.next();
+      }
+    },
+    {
+      pattern: lunchbot.utterances.yes,
+      callback: function(response,convo) {
+        convo.sayFirst('How much do you love food! Go eat.');
+        convo.next();
+      }
+    },
+    {
+      pattern: lunchbot.utterances.no,
+      callback: function (response,convo) {
+        Purveyor.getByLocationType('carry out').then(function(data) {
+                console.log('success in getByLocationType in callback', data.locations[0].name);
+                var place = data.locations[0];
+                convo.ask("How about " + place.name + "?", lunchynski.carryout_callback());
+                convo.next();                
+              },
+              function() {
+                console.log('NOT success in getByLocationType');
+                convo.say("It looks like we don't have any choices for you.");
+                convo.ask("Want to try again?", lunchynski.carryout_callback());
+                convo.next;
+              });
+      }
+    },
+    {
+      default: true,
+      callback: function(response,convo) {
+        console.log('default');
+        // repeat the question
+        convo.repeat();
+        convo.next();
+      }
+    }
+  ];
+};
+
+lunchynski.dinein_callback = function() {
+  return [
       {
         pattern: 'done',
         callback: function(response,convo) {
@@ -445,22 +506,19 @@ var plugin = {
       },
       {
         pattern: lunchbot.utterances.no,
-        callback: function carry_cb(response,convo) {
-          purveyor.findAll({
-              //order: 'RANDOM()',
-              limit: 1,
-              where: {
-                location_type: { $like : '%carry%' }
-              }
-            },
-          function(err, rows) {
+        callback: function(response,convo) {
+          Purveyor.findAll({
+            limit: 1,
+            //order: 'RANDOM()',
+            where: { location_type: { $like: '%dine%' } }
+          },
+          function(err, restaurants) {
             if (err) {
-              console.log("ERROR ", err);
-              convo.next();
+              console.log('ERR:', err);
+            } else {
+              var question = 'How about ' + restaurants[0].name + '?';
+              convo.ask(question, exports.dinein_callback());
             }
-
-            var question = 'How about ' + rows[0].name + '?';
-            convo.ask(question, exports.carryout_callback());
             convo.next();
           });
         }
@@ -468,70 +526,10 @@ var plugin = {
       {
         default: true,
         callback: function(response,convo) {
-          console.log('default');
           // repeat the question
           convo.repeat();
           convo.next();
         }
       }
-    ];
-  },
-
-  dinein_callback: function() {
-    return [
-        {
-          pattern: 'done',
-          callback: function(response,convo) {
-            convo.say('Sweet. Go eat!');
-            convo.next();
-          }
-        },
-        {
-          pattern: lunchbot.utterances.yes,
-          callback: function(response,convo) {
-            convo.sayFirst('How much do you love food! Go eat.');
-            convo.next();
-          }
-        },
-        {
-          pattern: lunchbot.utterances.no,
-          callback: function(response,convo) {
-            purveyor.findAll({
-              limit: 1,
-              //order: 'RANDOM()',
-              where: { location_type: { $like: '%dine%' } }
-            },
-            function(err, restaurants) {
-              if (err) {
-                console.log('ERR:', err);
-              } else {
-                var question = 'How about ' + restaurants[0].name + '?';
-                convo.ask(question, exports.dinein_callback());
-              }
-              convo.next();
-            });
-          }
-        },
-        {
-          default: true,
-          callback: function(response,convo) {
-            // repeat the question
-            convo.repeat();
-            convo.next();
-          }
-        }
-    ];
-  },
-
-  addPurveyor: function(restaurant) {
-    FoodPurveyor.create({
-      name: restaurant.name,
-      location: restaurant.location,
-      location_type: restaurant.location_type,
-      cuisine: restaurant.cuisine
-    });
-  }
-
+  ];
 };
-
-module.exports = plugin;
