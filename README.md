@@ -1,2 +1,2 @@
 # Lunchynski
-A Lunch bot built upon the Slack BotKit framework.
+Work in progress lunch bot built upon the Slack BotKit framework.
